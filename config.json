@@ -1,0 +1,16 @@
+{
+    "dataPath": "<path-to-your-data-file-(json)>",
+    "dateSeperator": "-",
+    "autoClearCompletedPastTasks": false,
+    "autoAddUncompletedTasks": true,
+    "done": "\u2713",
+    "important": "!",
+    "outputLength": "19",
+    "ntask": "4",
+    "tagColors": {
+        "-important-": "#FF0000",
+        "-overdue-": "#FFA07A",
+        "-done-": "#21f141",
+        "-undone-": ""
+    }
+}

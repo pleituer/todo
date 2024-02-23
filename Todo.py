@@ -1,0 +1,199 @@
+import json
+import copy
+import datetime
+
+from Day import Day
+from config import CONFIG
+from utils import TODAY
+
+class Todo():
+    def __init__(self, fp=None):
+        if fp is None:
+            self.data = {}
+            self.numOfEvents = []
+        else:
+            with open(fp, "r") as f:
+                self.data = json.load(f)
+            self.data = {date: Day(date, self.data[date]) for date in self.data if not date.startswith("-")}
+            self.numOfEvents = [len(self.data[date].events) for date in self.data]
+        self.outputLength = int(CONFIG["outputLength"])
+        self.ntask = int(CONFIG["ntask"])
+        today = TODAY
+        if CONFIG["autoAddUncompletedTasks"]:
+            for date in copy.copy(self.data):
+                if date < today:
+                    for event in self.data[date].events:
+                        jsonifiedEvent = copy.deepcopy( event.jsonify())
+                        jsonifiedEvent["tags"].insert(0, "-overdue-")
+                        jsonifiedEventDone = copy.deepcopy(jsonifiedEvent)
+                        jsonifiedEventDone["status"] = True
+                        if not (event.status or (today in self.data and jsonifiedEvent in self.data[today].jsonify()["events"]) or (today in self.data and jsonifiedEventDone in self.data[today].jsonify()["events"])):
+                            self.addEvent(today, jsonifiedEvent)
+    def save(self, fp):
+        with open(fp, "w") as f:
+            sterializedData = {date: self.data[date].jsonify() for date in self.data}
+            json.dump(sterializedData, f)
+    def addEvent(self, dateString, dataDict):
+        day = self.data.get(dateString, None)
+        if day is None:
+            self.data[dateString] = Day(dateString, {'events': [dataDict]})
+        else:
+            day.addEvent(dataDict)
+        self.data = {date: self.data[date] for date in sorted(self.data)}
+        self.numOfEvents = [len(self.data[date].events) for date in self.data]
+    def deleteEvent(self, dateString, eventIndex):
+        try: 
+            self.data[dateString].deletEvent(eventIndex)
+            if len(self.data[dateString].events) == 0:
+                self.data.pop(dateString)
+        except:
+            print("Invalid Date or Index")
+        self.numOfEvents = [len(self.data[date].events) for date in self.data]
+    def listView(self, day=None, pointer=None, tag=None):
+        for d in self.data: self.data[d].events = sorted(self.data[d].events, key=lambda event: "-important-" in event.tags, reverse=True)
+        if not len(self.data):
+            return "Empty, add tasks todo!"
+        if day is None:
+            dlistviews = [self.data[date].listView(tag=tag) if pointer is None else self.data[date].listView(pointedEvent=pointer - sum(self.numOfEvents[:idx]), tag=tag) for idx, date in enumerate(self.data) if date >= TODAY or pointer is not None]
+            return "\n".join(d for d in dlistviews if d.split('\n')[1] != "") if any(d.split('\n')[1] != "" for d in dlistviews) else f"No tasks with tag {tag}"
+        else:
+            tagsDay = []
+            for e in self.data[day].events:
+                tagsDay.extend(e.tags)
+            if tag in tagsDay or tag is None:
+                return self.data[day].listView(pointedEvent=pointer, tag=tag)
+            else:
+                return f"No tasks with tag {tag}"
+    def detailedView(self, day=None, tag=None, hideDone=False):
+        for d in self.data: self.data[d].events = sorted(self.data[d].events, key=lambda event: "-important-" in event.tags, reverse=True)
+        if not len(self.data):
+            return "Empty, add tasks todo!"
+        if day is None:
+            dlistviews = [self.data[date].detailedView(tag=tag, hideDone=hideDone) for date in self.data if date >= TODAY]
+            return "\n\n".join(d for d in dlistviews if d.split('\n')[1] != "") if any(d.split('\n')[1] != "" for d in dlistviews) else (f"No tasks with tag {tag}" if tag is not None else "No tasks todo!")
+        else:
+            tagsDay = []
+            doneAll = True
+            for e in self.data[day].events:
+                tagsDay.extend(e.tags)
+                doneAll = doneAll and e.status
+            if (tag in tagsDay or tag is None) and not (hideDone and doneAll):
+                return self.data[day].detailedView(tag=tag, hideDone=hideDone)
+            else:
+                if hideDone and doneAll:
+                    return f"All tasks today done!!!"
+                else:
+                    return f"No tasks with tag {tag}"
+    def calendarView(self, dateString, tag=None):
+            for day in self.data: self.data[day].events = sorted(self.data[day].events, key=lambda event: "-important-" in event.tags, reverse=True)
+            ## dd - placeholder for day
+            ## [ ] ttttttttttt - placeholder for task
+            outputLength = self.outputLength
+            ntask = self.ntask
+            year, month = map(int, dateString.split("-"))
+            monthLength = [31, 28 + (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+            monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+            monthName = monthNames[month - 1]
+            firstDay = (datetime.date(year, month, 1).weekday()+1)%7
+            ncells = (firstDay + monthLength[month-1])
+            nrows = ncells // 7 + (ncells % 7 != 0)
+            ncells = nrows * 7
+            separator = "─"*(outputLength+2)
+            firstLineS = lambda weekday: "  dd"+" "*((outputLength-5)//2-2)+weekday+" "*(outputLength-5-((outputLength-5)//2-2))
+            followLineS = f"  dd{' '*(outputLength-3)} "
+            taskPlaceholder = f"[ ] {'t'*(outputLength-4)}"
+            taskPlaceholderl = f"│ {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} |\n"*ntask
+            if nrows == 4:
+                calendarTemplate = f"""{dateString} {monthName}
+┌{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┐
+│{firstLineS("Sun")}│{firstLineS("Mon")}│{firstLineS("Tue")}│{firstLineS("Wed")}│{firstLineS("Thu")}│{firstLineS("Fri")}│{firstLineS("Sat")}│
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}└{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┘
+"""
+            elif nrows == 5:
+                calendarTemplate = f"""{dateString} {monthName}
+┌{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┐
+│{firstLineS("Sun")}│{firstLineS("Mon")}│{firstLineS("Tue")}│{firstLineS("Wed")}│{firstLineS("Thu")}│{firstLineS("Fri")}│{firstLineS("Sat")}│
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}└{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┘
+"""
+            elif nrows == 6:
+                calendarTemplate = f"""{dateString} {monthName}
+┌{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┐
+│{firstLineS("Sun")}│{firstLineS("Mon")}│{firstLineS("Tue")}│{firstLineS("Wed")}│{firstLineS("Thu")}│{firstLineS("Fri")}│{firstLineS("Sat")}│
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
+│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
+{taskPlaceholderl}└{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┘
+"""
+            for _ in range(firstDay):
+                calendarTemplate = calendarTemplate.replace(f"dd", "  ", 1)
+            for date in range(1, monthLength[month-1]+1):
+                calendarTemplate = calendarTemplate.replace(f"dd", f"{date}{' '*int(date<10)}", 1)
+            for _ in range(ncells-firstDay-monthLength[month-1]):
+                calendarTemplate = calendarTemplate.replace(f"dd", "  ", 1)
+            taskList = [[] for _ in range(firstDay)] + [(self.data[f"{dateString}-{'0'*int(date<10)}{date}"].calendarView(outputLength=outputLength, tag=tag) if f"{dateString}-{'0'*int(date<10)}{date}" in self.data else []) for date in range(1, monthLength[month-1]+1)] + [[] for _ in range(ncells-firstDay-monthLength[month-1])]
+            for i, t in enumerate(taskList):
+                if len(t) < ntask: t += [" "*outputLength]*(ntask-len(t))
+                taskList[i] = t[:ntask]
+            for week in range(nrows):
+                weekList = taskList[week*7:(week+1)*7]
+                weekList = [task for sublist in zip(*weekList) for task in sublist]
+                for task in weekList:
+                    calendarTemplate = calendarTemplate.replace(taskPlaceholder, task, 1)
+            return calendarTemplate
+
+"""
+Calendar Template:
+2024-02 February
+┌─────────────────┬─────────────────┬─────────────────┬─────────────────┬─────────────────┬─────────────────┬─────────────────┐
+│       Sun       │       Mon       │       Tue       │       Wed       │  1    Thu       │  2    Fri       │  3    Sat       │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┤
+│  4              │  5              │  6              │  7              │  8              │  9              │  10             │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┤
+│  11             │  12             │  13             │  14             │  15             │  16             │  17             │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┤
+│  18             │  19             │  20             │  21             │  22             │  23             │  24             │
+│                 │                 │                 │                 │ [X] CIM Webpage │                 │                 │
+│                 │                 │                 │                 │ [ ] STAT2602... │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+├─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┼─────────────────┤
+│  25             │  26             │  27             │  28             │  29             │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+│                 │                 │                 │                 │                 │                 │                 │
+└─────────────────┴─────────────────┴─────────────────┴─────────────────┴─────────────────┴─────────────────┴─────────────────┘
+"""

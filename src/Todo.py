@@ -144,7 +144,6 @@ class Todo():
                 weekList = [task for sublist in zip(*weekList) for task in sublist]
                 for task in weekList:
                     calendarTemplate = calendarTemplate.replace(taskPlaceholder, task, 1)
-            print(calendarTemplate)
             return calendarTemplate
 
 """

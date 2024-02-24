@@ -6,20 +6,9 @@ import json
 
 from Todo import Todo
 from Event import Event
-from config import CONFIG
+from config import CONFIG, CONFIG_NAME
 from utils import hexToRGBString, tagColorWrap, TODAY
-
-try:
-    import msvcrt
-except ImportError:
-    import termios, sys, tty
-
-UP = "UP"
-DOWN = "DOWN"
-LEFT = "LEFT"
-RIGHT = "RIGHT"
-INVALID = "INVALID"
-ENTER = "ENTER"
+from Input import Input, UP, DOWN, LEFT, RIGHT, ENTER, INVALID
 
 dateRegex = r"^\d{4}"+CONFIG["dateSeperator"]+r"\d{2}"+CONFIG["dateSeperator"]+r"\d{2}$"
 dateRegex2 = r"^\d{4}"+CONFIG["dateSeperator"]+r"\d{2}$"
@@ -117,52 +106,6 @@ Task marked as done
     [X] Valentine's Day
 ====================="""
 
-def getch_posix():
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    try:
-        tty.setraw(sys.stdin.fileno())
-        ch = sys.stdin.read(1)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    if ch == "\x1b":
-        ch = sys.stdin.read(2)
-        if ch == "[A":
-            return UP
-        elif ch == "[B":
-            return DOWN
-        elif ch == "[C":
-            return RIGHT
-        elif ch == "[D":
-            return LEFT
-        else:
-            return INVALID
-    elif ch == "\r":
-        return ENTER
-    return ch
-def getch_win():
-    ch = msvcrt.getch()
-    if ch == b"\xe0":
-        ch = msvcrt.getch()
-        if ch == b"H":
-            return UP
-        elif ch == b"P":
-            return DOWN
-        elif ch == b"M":
-            return RIGHT
-        elif ch == b"K":
-            return LEFT
-        else:
-            return INVALID
-    elif ch == b"\r":
-        return ENTER
-    return ch.decode("utf-8")
-def getch():
-    try:
-        return getch_win()
-    except NameError:
-        return getch_posix()
-
 def checkValidFormat(dateString, regex=dateRegex):
     if not re.match(regex, dateString):
         print("Invalid date format")
@@ -172,6 +115,7 @@ def checkValidFormat(dateString, regex=dateRegex):
         exit()
 
 def selectTask(todo):
+    kb = Input()
     todoList = todo.listView(pointer=0).split("\n")
     refreshText = f"\x1b[{len(todoList)+1}A"
     pointedTask = 0
@@ -184,7 +128,7 @@ def selectTask(todo):
     while True:
         print(refreshText)
         print(todo.listView(pointer=pointedTask))
-        ch = getch()
+        ch = kb.getch()
         if ch == UP or ch == "w" or ch == "W":
             pointedTask = max(0, pointedTask - 1)
         elif ch == DOWN or ch == "s" or ch == "S":
@@ -202,6 +146,16 @@ def selectTask(todo):
         pointedTask -= len(todo.data[date].events)
     return day, pointedTask
 
+def calendarWarn():
+    kb = Input(t=0.1, showCursor=True)
+    print("WARNING: Terminal size too small to display calendar view")
+    print("Please resize terminal")
+    print("Or press ENTER to continue in calendar view (WARNING: may not be displayed properly)")
+    ch = ''
+    while ch != ENTER and os.get_terminal_size().columns <= 8+7*(2+int(CONFIG["outputLength"])):
+        ch = kb.getch()
+    print("\x1b[4A")
+
 def clearPastTasks(todo):
     today = TODAY
     for day in todo.data.keys():
@@ -216,13 +170,13 @@ def configCheck():
         CONFIG["tagColors"]["-overdue-"] = "#FFA07A"
         CONFIG["tagColors"]["-done-"] = "#21f141"
         CONFIG["tagColors"]["-undone-"] = ""
-        with open(os.environ["todo_configPath"], "w") as f:
+        with open(os.path.join(os.environ["todoPath"], CONFIG_NAME), "w") as f:
             f.write(json.dumps(CONFIG, indent=4))
-    if "todo_configPath" not in os.environ:
-        os.environ["todo_configPath"] = os.path.join(os.path.dirname(__file__), "config.json")
+    if "todoPath" not in os.environ:
+        os.environ["todoPath"] = os.path.dirname(__file__)
     if not os.path.exists(CONFIG["dataPath"]):
-        CONFIG["dataPath"] = os.path.join(os.path.dirname(__file__), "data.json")
-        with open(os.environ["todo_configPath"], "w") as f:
+        CONFIG["dataPath"] = os.path.join(os.environ["todoPath"], "data.json")
+        with open(os.path.join(os.environ["todoPath"], CONFIG_NAME), "w") as f:
             f.write(json.dumps(CONFIG, indent=4))
 
 def _help(todo):
@@ -425,20 +379,20 @@ def _undone(todo):
     todo.data[day].events[pointedTask].undone()
     print("Task marked undone successfully")
 def _calendar(todo):
+    print("Calendar View")
+    calendarWarn()
+    print("\x1b[0m", end="")
     if len(sys.argv) == 2:
-        print("Calendar View")
         print(todo.calendarView(dateString=datetime.datetime.now().strftime("%Y-%m")))
     elif len(sys.argv) == 3: 
         dateString = sys.argv[2]
         checkValidFormat(dateString, regex=dateRegex2)
-        print("Calendar View")
         print(todo.calendarView(dateString=dateString))
     elif len(sys.argv) == 4 and sys.argv[2] != "-tag":
         print("Invalid Command/Format")
         exit()
     elif len(sys.argv) == 4 and sys.argv[2] == "-tag":
         tag = sys.argv[3]
-        print("Calendar View")
         print(todo.calendarView(dateString=datetime.datetime.now().strftime("%Y-%m"), tag=tag))
     elif len(sys.argv) == 5:
         if sys.argv[3] != "-tag" and sys.argv[2] != "-tag":
@@ -447,7 +401,6 @@ def _calendar(todo):
         tag = sys.argv[4] if sys.argv[3] == "-tag" else sys.argv[3]
         dateString = sys.argv[2] if sys.argv[3] == "-tag" else sys.argv[4]
         checkValidFormat(dateString, regex=CONFIG["dateRegex2"])
-        print("Calendar View")
         print(todo.calendarView(dateString=dateString, tag=tag))
     else:
         print("Invalid Command/Format")

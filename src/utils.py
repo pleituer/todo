@@ -13,5 +13,5 @@ def tagColorWrap(tag):
         return hexToRGBString(CONFIG["tagColors"][tag])+tag+"\x1b[0m"
     else:
         return tag
-
+    
 TODAY = datetime.date.today().strftime(f"%Y{CONFIG['dateSeperator']}%m{CONFIG['dateSeperator']}%d")

@@ -8,19 +8,19 @@ First clone to repo, then do the following
 
 ### Setting up
 
-Create a new environment variable `todo_configPath` with the following command:
+Create a new environment variable `todoPath` with the following command:
 
 #### Windows (powershell)
 ```powershell
-$Env:todo_configPath = "<path-to-config-file>"
+$Env:todoPath = "<path-to-dir-of-todo>"
 ```
 
 #### Most Linux and MacOS (bash/zsh/similar shell scripts)
 ```bash
-export todo_configPath "<path-to-config-file>"
+export todoPath "<path-to-dir-of-todo>"
 ```
 
-`<path-to-config-file>` is the path to the configuration file (usually named `config.json`) for `todo`.
+`<path-to-dir-of-todo>` is the path to the project directory.
 
 ### The `todo` Command
 
@@ -49,6 +49,7 @@ The configuration file path is stored in the environment variable `todo_configPa
 |Config Var|<center>Description</center>|
 |--|--|
 |`dataPath`|The Path to a json file where the data is stored, usually `.../data.json`|
+|`archivePath`|The Path to a json file where data is archived, usually `.../archived.json`|
 |`dateSeperator`|The separator for the format of the date|
 |`autoClearCompletedPastTasks`|If `true`, will then allow the todo list to automatically clear completed tasks in previous days|
 |`autoAddUncompletedTasks`|If `true`, will allow the todo list to automatically add any uncompleted task form previous days to today, adding a `-overdue-` tag alongside|

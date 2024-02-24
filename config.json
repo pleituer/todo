@@ -1,5 +1,6 @@
 {
     "dataPath": "<path-to-your-data-file-(json)>",
+    "archivePath": "<path-to-your-archive-file-(json)>",
     "dateSeperator": "-",
     "autoClearCompletedPastTasks": false,
     "autoAddUncompletedTasks": true,

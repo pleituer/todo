@@ -1,3 +1,4 @@
+import os
 import json
 import copy
 import datetime
@@ -18,17 +19,32 @@ class Todo():
             self.numOfEvents = [len(self.data[date].events) for date in self.data]
         self.outputLength = int(CONFIG["outputLength"])
         self.ntask = int(CONFIG["ntask"])
-        today = TODAY
+        # archieve old tasks
+        if os.path.exists(CONFIG["archivePath"]):
+            with open(CONFIG["archivePath"], "r") as f:
+                archieved = {date:Day(date, day) for date, day in json.load(f).items()}
+                for date in self.data:
+                    if date < TODAY:
+                        archieved[date] = copy.deepcopy(self.data[date])
+        else:
+            archieved = {date: copy.deepcopy(self.data[date]) for date in self.data if date < TODAY}
+        # self.data only contains TODAY and future tasks
+        self.data = {date: self.data[date] for date in self.data if date >= TODAY}
         if CONFIG["autoAddUncompletedTasks"]:
-            for date in copy.copy(self.data):
-                if date < today:
-                    for event in self.data[date].events:
-                        jsonifiedEvent = copy.deepcopy( event.jsonify())
-                        jsonifiedEvent["tags"].insert(0, "-overdue-")
-                        jsonifiedEventDone = copy.deepcopy(jsonifiedEvent)
-                        jsonifiedEventDone["status"] = True
-                        if not (event.status or (today in self.data and jsonifiedEvent in self.data[today].jsonify()["events"]) or (today in self.data and jsonifiedEventDone in self.data[today].jsonify()["events"])):
-                            self.addEvent(today, jsonifiedEvent)
+            for date in archieved:
+                if date < TODAY:
+                    for event in archieved[date].events:
+                        if not event.status and "-done-" not in event.tags:
+                            jsonifiedEvent = copy.deepcopy(event.jsonify())
+                            jsonifiedEvent["tags"].insert(0, "-overdue-")
+                            jsonifiedEventDone = copy.deepcopy(jsonifiedEvent)
+                            jsonifiedEventDone["status"] = True
+                            if not (TODAY in self.data and (jsonifiedEvent in self.data[TODAY].jsonify()["events"] or jsonifiedEventDone in self.data[TODAY].jsonify()["events"])):
+                                self.addEvent(TODAY, jsonifiedEvent)
+                            elif not (TODAY in self.data and jsonifiedEvent in self.data[TODAY].jsonify()["events"]):
+                                event.tags.append("-done-")
+        with open(CONFIG["archivePath"], "w") as f:
+            json.dump({date:archieved[date].jsonify() for date in archieved}, f)
     def save(self, fp):
         with open(fp, "w") as f:
             sterializedData = {date: self.data[date].jsonify() for date in self.data}
@@ -81,13 +97,19 @@ class Todo():
                 return self.data[day].detailedView(tag=tag, hideDone=hideDone)
             else:
                 if hideDone and doneAll:
-                    return f"All tasks today done!!!"
+                    return f"All tasks TODAY done!!!"
                 else:
                     return f"No tasks with tag {tag}"
-    def calendarView(self, dateString, tag=None):
+    def calendarView(self, dateString, tag=None, showAll=True):
             for day in self.data: self.data[day].events = sorted(self.data[day].events, key=lambda event: "-important-" in event.tags, reverse=True)
             ## dd - placeholder for day
             ## [ ] ttttttttttt - placeholder for task
+            allData = copy.deepcopy(self.data)
+            if showAll:
+                with open(CONFIG["archivePath"], "r") as f:
+                    archieved = {date:Day(date, day) for date, day in json.load(f).items()}
+                for date in archieved:
+                    allData[date] = archieved[date]
             outputLength = self.outputLength
             ntask = self.ntask
             year, month = map(int, dateString.split("-"))
@@ -103,55 +125,17 @@ class Todo():
             followLineS = f"  dd{' '*(outputLength-3)} "
             taskPlaceholder = f"[ ] {'t'*(outputLength-4)}"
             taskPlaceholderl = f"│ {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} | {taskPlaceholder} |\n"*ntask
-            if nrows == 4:
-                calendarTemplate = f"""{dateString} {monthName}
-┌{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┐
-│{firstLineS("Sun")}│{firstLineS("Mon")}│{firstLineS("Tue")}│{firstLineS("Wed")}│{firstLineS("Thu")}│{firstLineS("Fri")}│{firstLineS("Sat")}│
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}└{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┘
-"""
-            elif nrows == 5:
-                calendarTemplate = f"""{dateString} {monthName}
-┌{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┐
-│{firstLineS("Sun")}│{firstLineS("Mon")}│{firstLineS("Tue")}│{firstLineS("Wed")}│{firstLineS("Thu")}│{firstLineS("Fri")}│{firstLineS("Sat")}│
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}└{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┘
-"""
-            elif nrows == 6:
-                calendarTemplate = f"""{dateString} {monthName}
-┌{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┐
-│{firstLineS("Sun")}│{firstLineS("Mon")}│{firstLineS("Tue")}│{firstLineS("Wed")}│{firstLineS("Thu")}│{firstLineS("Fri")}│{firstLineS("Sat")}│
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤
-│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|
-{taskPlaceholderl}└{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┘
-"""
+            calendarTemplate = f"{dateString} {monthName}                                                                                                           \n┌{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┬{separator}┐\n│{firstLineS('Sun')}│{firstLineS('Mon')}│{firstLineS('Tue')}│{firstLineS('Wed')}│{firstLineS('Thu')}│{firstLineS('Fri')}│{firstLineS('Sat')}│\n"
+            for _ in range(nrows-1):
+                calendarTemplate += f"{taskPlaceholderl}├{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┼{separator}┤\n│{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|{followLineS}|\n"
+            calendarTemplate += f"{taskPlaceholderl}└{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┴{separator}┘\n"
             for _ in range(firstDay):
                 calendarTemplate = calendarTemplate.replace(f"dd", "  ", 1)
             for date in range(1, monthLength[month-1]+1):
                 calendarTemplate = calendarTemplate.replace(f"dd", f"{date}{' '*int(date<10)}", 1)
             for _ in range(ncells-firstDay-monthLength[month-1]):
                 calendarTemplate = calendarTemplate.replace(f"dd", "  ", 1)
-            taskList = [[] for _ in range(firstDay)] + [(self.data[f"{dateString}-{'0'*int(date<10)}{date}"].calendarView(outputLength=outputLength, tag=tag) if f"{dateString}-{'0'*int(date<10)}{date}" in self.data else []) for date in range(1, monthLength[month-1]+1)] + [[] for _ in range(ncells-firstDay-monthLength[month-1])]
+            taskList = [[] for _ in range(firstDay)] + [(allData[f"{dateString}-{'0'*int(date<10)}{date}"].calendarView(outputLength=outputLength, tag=tag) if f"{dateString}-{'0'*int(date<10)}{date}" in allData else []) for date in range(1, monthLength[month-1]+1)] + [[] for _ in range(ncells-firstDay-monthLength[month-1])]
             for i, t in enumerate(taskList):
                 if len(t) < ntask: t += [" "*outputLength]*(ntask-len(t))
                 taskList[i] = t[:ntask]
@@ -160,6 +144,7 @@ class Todo():
                 weekList = [task for sublist in zip(*weekList) for task in sublist]
                 for task in weekList:
                     calendarTemplate = calendarTemplate.replace(taskPlaceholder, task, 1)
+            print(calendarTemplate)
             return calendarTemplate
 
 """

@@ -1,5 +1,7 @@
 from Event import Event
 
+from utils import DISCORD_MODE
+
 class Day():
     def __init__(self, dateString, dataDict):
         self.date = dateString
@@ -13,13 +15,13 @@ class Day():
             "date": self.date,
             "events": [event.jsonify() for event in self.events]
         }
-    def listView(self, pointedEvent=None, tag=None):
-        eventListStr = "\n".join([event.listView(arrow=pointedEvent==idx) for idx, event in enumerate(self.events) if tag in event.tags or tag is None])
+    def listView(self, pointedEvent=None, tag=None, col=True):
+        eventListStr = "\n".join(["`"*DISCORD_MODE+event.listView(arrow=pointedEvent==idx, col=col)+"`"*DISCORD_MODE for idx, event in enumerate(self.events) if tag in event.tags or tag is None])
         return f"""==== {self.date} ====
 {eventListStr}
 ====={"="*len(self.date)}====="""
-    def detailedView(self, tag=None, hideDone=False):
-        eventListStr = "\n\n".join([event.detailedView(idx=idx+1) for idx, event in enumerate(self.events) if (tag in event.tags or tag is None) and not (hideDone and event.status)])
+    def detailedView(self, tag=None, hideDone=False, col=True):
+        eventListStr = "\n\n".join([event.detailedView(idx=idx, col=col) for idx, event in enumerate(self.events) if (tag in event.tags or tag is None) and not (hideDone and event.status)])
         return f"""==== {self.date} ====
 {eventListStr}
 ====={"="*len(self.date)}====="""

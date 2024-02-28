@@ -7,11 +7,8 @@ import json
 from Todo import Todo
 from Event import Event
 from config import CONFIG, CONFIG_NAME
-from utils import hexToRGBString, tagColorWrap, TODAY
+from utils import hexToRGBString, tagColorWrap, checkValidFormat, getTODAY, dateRegex, dateRegex2
 from Input import Input, UP, DOWN, LEFT, RIGHT, ENTER, INVALID
-
-dateRegex = r"^\d{4}"+CONFIG["dateSeperator"]+r"\d{2}"+CONFIG["dateSeperator"]+r"\d{2}$"
-dateRegex2 = r"^\d{4}"+CONFIG["dateSeperator"]+r"\d{2}$"
 
 config_str = "\n".join([f"    - {key}: {CONFIG[key]}" for key in CONFIG])
 
@@ -106,14 +103,6 @@ Task marked as done
     [X] Valentine's Day
 ====================="""
 
-def checkValidFormat(dateString, regex=dateRegex):
-    if not re.match(regex, dateString):
-        print("Invalid date format")
-        exit()
-    elif int(dateString.split(CONFIG["dateSeperator"])[1]) > 12 or (len(dateString.split(CONFIG["dateSeperator"])) > 2 and int(dateString.split(CONFIG["dateSeperator"])[2]) > 31):
-        print("Invalid date")
-        exit()
-
 def selectTask(todo):
     kb = Input()
     todoList = todo.listView(pointer=0).split("\n")
@@ -157,7 +146,7 @@ def calendarWarn():
     print("\x1b[4A")
 
 def clearPastTasks(todo):
-    today = TODAY
+    today = getTODAY()
     for day in todo.data.keys():
         events = todo.data[day].events
         if day < today:
@@ -176,6 +165,14 @@ def configCheck():
         os.environ["todoPath"] = os.path.dirname(__file__)
     if not os.path.exists(CONFIG["dataPath"]):
         CONFIG["dataPath"] = os.path.join(os.environ["todoPath"], "data.json")
+        with open(os.path.join(os.environ["todoPath"], CONFIG_NAME), "w") as f:
+            f.write(json.dumps(CONFIG, indent=4))
+    if int(CONFIG["outputLength"]) < 10:
+        CONFIG["outputLength"] = "10"
+        with open(os.path.join(os.environ["todoPath"], CONFIG_NAME), "w") as f:
+            f.write(json.dumps(CONFIG, indent=4))
+    if int(CONFIG["ntask"]) < 1:
+        CONFIG["ntask"] = "1"
         with open(os.path.join(os.environ["todoPath"], CONFIG_NAME), "w") as f:
             f.write(json.dumps(CONFIG, indent=4))
 
@@ -201,7 +198,7 @@ def _add(todo):
             exit()
         if prompt == "Day (YYYY-MM-DD): ":
             checkValidFormat(inp)
-            today = TODAY
+            today = getTODAY()
             if inp < today:
                 print("Cannot add task for past date")
                 exit()
@@ -222,6 +219,9 @@ def _delete(todo):
     elif len(sys.argv) == 3:
         day = sys.argv[2]
         checkValidFormat(day)
+        if day < getTODAY():
+            print("Cannot delete task for past date")
+            exit()
         if day not in todo.data.keys():
             print("No tasks for this day")
             exit()
@@ -240,10 +240,7 @@ def _list(todo):
         print(todo.listView())
     elif len(sys.argv) == 3:
         checkValidFormat(sys.argv[2])
-        if sys.argv[2] not in todo.data.keys():
-            print("No tasks for this day")
-        else:
-            print(todo.listView(day=sys.argv[2]))
+        print(todo.listView(day=sys.argv[2]))
     elif len(sys.argv) == 4 and sys.argv[2] != "-tag":
         print("Invalid Command/Format")
         exit()
@@ -266,10 +263,7 @@ def _listdetailed(todo):
         print(todo.detailedView())
     elif len(sys.argv) == 3:
         checkValidFormat(sys.argv[2])
-        if sys.argv[2] not in todo.data.keys():
-            print("No tasks for this day")
-        else:
-            print(todo.detailedView(day=sys.argv[2]))
+        print(todo.detailedView(day=sys.argv[2]))
     elif len(sys.argv) == 4 and sys.argv[2] != "-tag":
         print("Invalid Command/Format")
         exit()
@@ -288,7 +282,7 @@ def _listdetailed(todo):
         print("Invalid Command/Format")
         exit()
 def _today(todo):
-    today = TODAY
+    today = getTODAY()
     if len(sys.argv) == 2:
         if today not in todo.data.keys():
             print("No tasks for today")
@@ -310,6 +304,9 @@ def _edit(todo):
     elif len(sys.argv) == 3:
         day = sys.argv[2]
         checkValidFormat(day)
+        if day < getTODAY():
+            print("Cannot edit task for past date")
+            exit()
         if day not in todo.data.keys():
             print("No tasks for this day")
             exit()
@@ -347,6 +344,9 @@ def _done(todo):
     elif len(sys.argv) == 3:
         day = sys.argv[2]
         checkValidFormat(day)
+        if day < getTODAY():
+            print("Cannot mark task for past date")
+            exit()
         if day not in todo.data.keys():
             print("No tasks for this day")
             exit()
@@ -366,6 +366,9 @@ def _undone(todo):
     elif len(sys.argv) == 3:
         day = sys.argv[2]
         checkValidFormat(day)
+        if day < getTODAY():
+            print("Cannot mark task for past date")
+            exit()
         if day not in todo.data.keys():
             print("No tasks for this day")
             exit()
@@ -430,6 +433,9 @@ def _important(todo):
     elif len(sys.argv) == 3:
         day = sys.argv[2]
         checkValidFormat(day)
+        if day < getTODAY():
+            print("Cannot mark task for past date")
+            exit()
         if day not in todo.data.keys():
             print("No tasks for this day")
             exit()
@@ -449,15 +455,17 @@ overdue: {hexToRGBString(CONFIG["tagColors"]["-overdue-"])}{"-overdue-"}\x1b[0m
 done: {hexToRGBString(CONFIG["tagColors"]["-done-"])}{f"[{CONFIG['done']}]"}\x1b[0m
 undone: {hexToRGBString(CONFIG["tagColors"]["-undone-"])}{f"[ ]"}\x1b[0m
 """)
+    specialTags = ["-important-", "-overdue-", "-done-", "-undone-"]
     print("Custom Tags")
-    tagList = [tag for tag in CONFIG["tagColors"].keys() if tag not in ["-important-", "-overdue-", "-done-", "-undone-"]]
+    tagList = list(CONFIG["tagColors"].keys())
     for date in todo.data:
         for event in todo.data[date].events:
             for tag in event.tags:
                 if tag not in tagList:
                     tagList.append(tag)
     for tag in tagList:
-        print(f"  ◇ {tagColorWrap(tag)}\x1b[0m")
+        if tag not in specialTags:
+            print(f"  ◇ {tagColorWrap(tag)}\x1b[0m")
 
 def main():
     configCheck()
@@ -484,7 +492,7 @@ def main():
         elif sys.argv[1] in ["--config", "config"]: _config(todo)
         elif sys.argv[1] in ["-i", "--important", "important"]: _important(todo)
         else: print("Invalid Command/Format")
-        todo.save(CONFIG["dataPath"])
+        todo.save()
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,8 @@
 from config import CONFIG
 from utils import hexToRGBString, tagColorWrap
 
+reset = '\x1b[0m'
+
 class Event():
     def __init__(self, eventDict):
         self.title = eventDict['title']
@@ -29,12 +31,12 @@ class Event():
         }
     def done(self):
         self.status = True
-    def listView(self, arrow=False):
-        return f"{'->' if arrow else '  '} {self.doneHex}[{CONFIG['done'] if self.status else ' '}] {self.importantColor}{CONFIG['important'] if self.tags[0] == '-important-' else ''}{self.tagColor}{self.title}\x1b[0m"
-    def detailedView(self, idx=None):
+    def listView(self, arrow=False, col=True):
+        return f"{'->' if arrow else '  '} {self.doneHex if col else ''}[{CONFIG['done'] if self.status else ' '}] {self.importantColor if col else ''}{CONFIG['important'] if self.tags[0] == '-important-' else ''}{self.tagColor if col else ''}{self.title}{reset if col else ''}"
+    def detailedView(self, idx=None, col=True):
         return f"""Task{f" {idx}" if idx is not None else ""}: {self.title}
 Description: {self.description}
-Tags: {', '.join(tagColorWrap(tag) for tag in self.tags)}
+Tags: {', '.join(tagColorWrap(tag) if col else tag for tag in self.tags)}
 Done: {'Yes' if self.status else 'No'}"""
     def done(self):
         self.status = True

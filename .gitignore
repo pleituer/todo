@@ -3,3 +3,5 @@ trueConfig.json
 archived.json
 logs/
 errlogs/
+.env
+dodo.png
